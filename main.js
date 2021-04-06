@@ -21,11 +21,7 @@
 
     // Quit when all windows are closed.
     app.on('window-all-closed', function () {
-        // On OS X it is common for applications and their menu bar
-        // to stay active until the user quits explicitly with Cmd + Q
-        if (process.platform != 'darwin') {
-            app.quit();
-        }
+        app.quit();
     });
 
     function getWebContents() {
@@ -553,6 +549,12 @@
     function setStartInfo() {
 
         var script = 'function startWhenReady(){if (self.Emby && self.Emby.App){self.appStartInfo=' + startInfoJson + ';Emby.App.start(appStartInfo);} else {setTimeout(startWhenReady, 50);}} startWhenReady();';
+        
+        if (process.platform === 'darwin') {
+            //hide the custom close/minimize/maximize buttons to replace with mac traffic lights.
+            mainWindow.webContents.insertCSS(".controlBox {display: none;}")
+            //mainWindow.webContents.insertCSS("button {outline: none;}")
+        }
         sendJavascript(script);
         //sendJavascript('var appStartInfo=' + startInfoJson + ';');
     }
@@ -924,8 +926,8 @@
         windowStateOnLoad = require('detect-rpi')() ? 'Fullscreen' : previousWindowInfo.state;
 
         var windowOptions = {
-            transparent: true, //supportsTransparency,
-            frame: false,
+            transparent: process.platform === 'darwin' ? false : true, //supportsTransparency,
+            frame: process.platform === 'darwin' ? true : false,
             title: 'Emby Theater',
             minWidth: 720,
             minHeight: 480,
