@@ -744,17 +744,17 @@
     function getPluginEntry(pluginDir, pluginName = `mpv-${process.platform}-${process.arch}.node`) {
         var path = require('path')
         const fullPluginPath = path.join(pluginDir, pluginName);
-        let pluginPath = ""
+        let pluginPath = path.relative(process.cwd(), fullPluginPath);
+
         if (containsNonASCII(fullPluginPath)) {
             // Try relative path to workaround ASCII-only path restriction.
             if (process.platform === "linux") {
-                pluginPath = path.relative(process.cwd(), fullPluginPath);
                 if (path.dirname(pluginPath) === ".") {
                     pluginPath = `.${path.sep}${pluginPath}`;
                 }
-            } else if (process.platform === "win32") {
-                process.chdir(pluginDir)
-                pluginPath = path.relative(process.cwd(), fullPluginPath);
+            } 
+            else if (process.platform === 'darwin' || process.platform === 'win32') {
+                process.chdir(pluginDir);
             }
         } else {
             pluginPath = fullPluginPath

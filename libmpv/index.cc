@@ -29,7 +29,6 @@
 
 using pp::Var;
 
-#ifndef _M_IX86
 // Strip GL_EXT_texture_norm16 because it doesn't work but reported as
 // available in Chrome 61-64 (electron 2.x) thus broking e.g. 10-bit
 // videos in mpv.
@@ -49,15 +48,10 @@ const GLubyte* myGetString(GLenum name) {
     return glGetString(name);
   }
 }
-#endif
 
 // PPAPI GLES implementation doesn't provide getProcAddress.
 static const std::unordered_map<std::string, void*> GL_CALLBACKS = {
-#ifdef _M_IX86
-  GLCB(GetString),
-#else
   { "glGetString", reinterpret_cast<void*>(myGetString) },
-#endif
   GLCB(ActiveTexture),
   GLCB(AttachShader),
   GLCB(BindAttribLocation),
@@ -266,34 +260,18 @@ class MPVInstance : public pp::Instance {
     // don't need to know type of properties.
     if (prop->format != MPV_FORMAT_NODE)
       return;
-    PostPropertyChange(prop->name, HandleMPVNode(static_cast<mpv_node*>(prop->data)));
-  }
-
-  Var HandleMPVNode(mpv_node* node) {
-    if (node->format == MPV_FORMAT_NODE_ARRAY) {
-      pp::VarArray array;
-      for (int i = 0; i < node->u.list->num; i++) {
-         array.Set(i, HandleMPVNode(&node->u.list->values[i]));
-      }
-      return array;
-    } else if (node->format == MPV_FORMAT_NODE_MAP) {
-      pp::VarDictionary dict;
-      for (int i = 0; i < node->u.list->num; i++) {
-          dict.Set(Var(node->u.list->keys[i]), HandleMPVNode(&node->u.list->values[i]));
-      }
-      return dict;
-    } else if (node->format == MPV_FORMAT_NONE) {
-      return Var::Null();
+    mpv_node* node = static_cast<mpv_node*>(prop->data);
+    if (node->format == MPV_FORMAT_NONE) {
+      PostPropertyChange(prop->name, Var::Null());
     } else if (node->format == MPV_FORMAT_STRING) {
-      return Var(node->u.string);
+      PostPropertyChange(prop->name, Var(node->u.string));
     } else if (node->format == MPV_FORMAT_FLAG) {
-     return Var(static_cast<bool>(node->u.flag));
+      PostPropertyChange(prop->name, Var(static_cast<bool>(node->u.flag)));
     } else if (node->format == MPV_FORMAT_INT64) {
-      return Var(static_cast<int32_t>(node->u.int64));
+      PostPropertyChange(prop->name, Var(static_cast<int32_t>(node->u.int64)));
     } else if (node->format == MPV_FORMAT_DOUBLE) {
-      return Var(node->u.double_);
+      PostPropertyChange(prop->name, Var(node->u.double_));
     }
-    return Var::Null();
   }
 
   static void HandleMPVWakeup(void* ctx) {
@@ -332,7 +310,16 @@ class MPVInstance : public pp::Instance {
     if (!mpv_)
       DIE("context init failed");
 
-    mpv_set_option_string(mpv_, "config", "yes");
+    char* terminal = getenv("MPVJS_TERMINAL");
+    if (terminal && strlen(terminal))
+      mpv_set_option_string(mpv_, "terminal", "yes");
+    char* verbose = getenv("MPVJS_VERBOSE");
+    if (verbose && strlen(verbose))
+      mpv_set_option_string(mpv_, "msg-level", "all=v");
+
+    // Can't be set after initialize in mpv 0.18.
+    mpv_set_option_string(mpv_, "input-default-bindings", "yes");
+    mpv_set_option_string(mpv_, "pause", "yes");
 
     if (mpv_initialize(mpv_) < 0)
       DIE("mpv init failed");
@@ -348,6 +335,14 @@ class MPVInstance : public pp::Instance {
 
     if (mpv_render_context_create(&mpv_gl_, mpv_, params) < 0)
       DIE("failed to initialize mpv GL context");
+
+    // Some convenient defaults. Can be always changed on ready event.
+    mpv_set_option_string(mpv_, "stop-playback-on-init-failure", "no");
+    mpv_set_option_string(mpv_, "audio-file-auto", "no");
+    mpv_set_option_string(mpv_, "sub-auto", "no");
+    mpv_set_option_string(mpv_, "volume-max", "100");
+    mpv_set_option_string(mpv_, "keep-open", "yes");
+    mpv_set_option_string(mpv_, "osd-bar", "no");
 
     return true;
   }
